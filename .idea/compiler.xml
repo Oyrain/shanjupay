@@ -38,6 +38,7 @@
       <module name="shanjupay-merchant-api" options="-parameters" />
       <module name="shanjupay-merchant-application" options="-parameters" />
       <module name="shanjupay-merchant-service" options="-parameters" />
+      <module name="shanjupay-transaction" options="-parameters" />
       <module name="shanjupay-transaction-api" options="-parameters -bootclasspath &quot;$PROJECT_DIR$/../../Program Files/Java/jdk1.8.0_321/jre/lib/rt.jar;$PROJECT_DIR$/../../Program Files/Java/jdk1.8.0_321/jre/lib/jce.jar&quot;" />
       <module name="shanjupay-transaction-service" options="-parameters" />
     </option>
