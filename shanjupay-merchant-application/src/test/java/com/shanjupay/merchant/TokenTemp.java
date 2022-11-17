@@ -22,6 +22,7 @@ public class TokenTemp {
 
     @Reference
     private MerchantService merchantService;
+    String s = "{\"appID\": \"wxd2bf2dba2e86a8c7\",\"appSecret\": \"cec1a9185ad435abe1bced4b93f7ef2e\",\"key\": \"95fe355daca50f1ae82f0865c2ce87c8\",\"mchID\": \"1502570431\",\"payKey\": \"95fe355daca50f1ae82f0865c2ce87c8\"}";
 
     @Test
     public void createTestToken() {
