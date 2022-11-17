@@ -1,9 +1,13 @@
 package com.shanjupay.transaction.service;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.shanjupay.common.cache.Cache;
 import com.shanjupay.common.domain.BusinessException;
 import com.shanjupay.common.domain.CommonErrorCode;
+import com.shanjupay.common.util.RedisUtil;
 import com.shanjupay.transaction.api.PayChannelService;
 import com.shanjupay.transaction.api.dto.PayChannelDTO;
 import com.shanjupay.transaction.api.dto.PayChannelParamDTO;
@@ -22,6 +26,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.dubbo.config.annotation.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import javax.annotation.Resource;
 import java.util.List;
 
 @Service
@@ -38,6 +43,10 @@ public class PayChannelServiceImpl implements PayChannelService {
 
     @Autowired
     private PayChannelParamMapper payChannelParamMapper;
+
+    @Resource
+    private Cache cache;
+
 
     /**
      * 获取平台服务类型
@@ -137,6 +146,8 @@ public class PayChannelServiceImpl implements PayChannelService {
             payChannelParamMapper.insert(entity);
         }
 
+        //更新缓存
+        updateCache(payChannelParamDTO.getAppId(), payChannelParamDTO.getPlatformChannelCode());
     }
 
     /**
@@ -148,11 +159,27 @@ public class PayChannelServiceImpl implements PayChannelService {
      */
     @Override
     public List<PayChannelParamDTO> queryPayChannelParamByAppAndPlatform(String appId, String platformChannel) throws BusinessException {
+        //从缓存中查询
+        //1.key的构建 如：SJ_PAY_PARAM:b910da455bc84514b324656e1088320b:shanju_c2b
+        String redisKey = RedisUtil.keyBuilder(appId, platformChannel);
+        //是否有缓存
+        Boolean exists = cache.exists(redisKey);
+        if (exists) { //存在缓存，从redis中获取并返回
+            //从redis获取key对应的value
+            String json = cache.get(redisKey);
+            //将redis中的json格式转换成对象
+            List<PayChannelParamDTO> payChannelParamDTOS = JSONObject.parseArray(json, PayChannelParamDTO.class);
+            return payChannelParamDTOS;
+        }
+
         //查出应用id和服务类型代码在app_platform_channel主键
         Long appPlatformChannelId = selectIdByAppPlatformChannel(appId, platformChannel);
         //根据appPlatformChannelId从pay_channel_param查询所有支付参数
         List<PayChannelParam> payChannelParams = payChannelParamMapper.selectList(new LambdaQueryWrapper<PayChannelParam>().eq(PayChannelParam::getAppPlatformChannelId, appPlatformChannelId));
         List<PayChannelParamDTO> payChannelParamDTOS = PayChannelParamConvert.INSTANCE.listentity2listdto(payChannelParams);
+
+        //存入缓存
+        updateCache(appId,platformChannel);
         return payChannelParamDTOS;
     }
 
@@ -192,5 +219,32 @@ public class PayChannelServiceImpl implements PayChannelService {
             return appPlatformChannel.getId();
         }
         return null;
+    }
+
+    /**
+     * 更新redis缓存
+     * @param appId
+     * @param platformChannel
+     */
+    private void updateCache(String appId, String platformChannel) {
+        //处理redis缓存
+        //1.key的构建 如：SJ_PAY_PARAM:b910da455bc84514b324656e1088320b:shanju_c2b
+        String redisKey = RedisUtil.keyBuilder(appId, platformChannel);
+        //2.查询redis,检查key是否存在
+        Boolean exists = cache.exists(redisKey);
+        if (exists) { //存在，则清除
+            cache.del(redisKey);
+        }
+
+        //3.从数据库查询应用的服务类型对应的实际支付参数，并重新存入缓存
+        //查出应用id和服务类型代码在app_platform_channel主键
+        Long appPlatformChannelId = selectIdByAppPlatformChannel(appId, platformChannel);
+        //根据appPlatformChannelId从pay_channel_param查询所有支付参数
+        List<PayChannelParam> payChannelParams = payChannelParamMapper.selectList(new LambdaQueryWrapper<PayChannelParam>().eq(PayChannelParam::getAppPlatformChannelId, appPlatformChannelId));
+        List<PayChannelParamDTO> payChannelParamDTOS = PayChannelParamConvert.INSTANCE.listentity2listdto(payChannelParams);
+
+        if (payChannelParamDTOS != null) {
+            cache.set(redisKey, JSON.toJSON(payChannelParamDTOS).toString());
+        }
     }
 }
